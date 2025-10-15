@@ -8,14 +8,14 @@ export interface ExcelData {
 
 export interface Sheet {
   name: string;
-  data: Record<string, any>[];
+  data: Record<string, unknown>[];
   columns: string[];
 }
 
 export interface ProcessedData {
   originalData: ExcelData;
-  jsonData: any;
-  analyzedData?: any;
+  jsonData: string;
+  analyzedData?: Record<string, unknown>;
   timestamp: string;
 }
 
@@ -36,7 +36,7 @@ export interface ChartData {
   id: string;
   type: 'bar' | 'line' | 'pie' | 'area';
   title: string;
-  data: any[];
+  data: Record<string, unknown>[];
   xKey?: string;
   yKey?: string;
 }
@@ -70,12 +70,12 @@ export interface CleanupResponse {
 }
 
 export interface CohereRequest {
-  data: any;
+  data: Record<string, unknown>;
   prompt: string;
 }
 
 export interface CohereResponse {
   success: boolean;
-  optimizedData: any;
+  optimizedData: Record<string, unknown>;
   suggestions: string[];
 }
