@@ -23,12 +23,11 @@ function createLog(level: LogEntry['level'], message: string): LogEntry {
   };
 }
 
-// Função para processar Excel
-async function processExcel(filePath: string, logs: LogEntry[]): Promise<{ sheets: ProcessedSheet[] }> {
+// Função para processar Excel do buffer
+async function processExcelFromBuffer(buffer: Buffer, logs: LogEntry[]): Promise<{ sheets: ProcessedSheet[] }> {
   try {
     logs.push(createLog('process', '📊 Iniciando leitura do arquivo Excel...'));
     
-    const buffer = await readFile(filePath);
     logs.push(createLog('info', `📄 Arquivo lido: ${buffer.length} bytes`));
     
     const workbook = XLSX.read(buffer, { type: 'buffer' });
@@ -173,25 +172,42 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { fileName, filePath, useAI } = body;
+    const { fileName, filePath, fileData, useAI } = body;
 
-    // Aceitar tanto fileName quanto filePath
-    let actualFilePath = filePath;
-    if (!actualFilePath && fileName) {
-      actualFilePath = path.join(process.cwd(), 'data', 'input', fileName);
-    }
+    let buffer: Buffer;
 
-    if (!actualFilePath) {
+    // Aceitar tanto fileData (base64 do Vercel) quanto filePath (local)
+    if (fileData) {
+      // Processar de base64 (Vercel)
+      logs.push(createLog('info', '🔄 Processando arquivo da memória (Vercel mode)...'));
+      buffer = Buffer.from(fileData, 'base64');
+    } else if (fileName || filePath) {
+      // Processar de arquivo (Local)
+      let actualFilePath = filePath;
+      if (!actualFilePath && fileName) {
+        actualFilePath = path.join(process.cwd(), 'data', 'input', fileName);
+      }
+
+      if (!actualFilePath) {
+        return NextResponse.json(
+          { success: false, message: 'Nome ou caminho do arquivo não fornecido' },
+          { status: 400 }
+        );
+      }
+
+      logs.push(createLog('info', '📂 Lendo arquivo do disco...'));
+      buffer = await readFile(actualFilePath);
+    } else {
       return NextResponse.json(
-        { success: false, message: 'Nome ou caminho do arquivo não fornecido' },
+        { success: false, message: 'Dados do arquivo não fornecidos' },
         { status: 400 }
       );
     }
 
     logs.push(createLog('info', '🚀 Iniciando processamento...'));
 
-    // 1. Processar Excel
-    const excelData = await processExcel(actualFilePath, logs);
+    // 1. Processar Excel do buffer
+    const excelData = await processExcelFromBuffer(buffer, logs);
 
     // 2. Converter para JSON
     logs.push(createLog('process', '🔄 Convertendo dados para JSON...'));

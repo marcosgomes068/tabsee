@@ -85,6 +85,8 @@ export default function Home() {
 
       const processResponse = await axios.post('/api/process', {
         fileName: uploadResponse.data.fileName,
+        fileData: uploadResponse.data.fileData, // Para Vercel
+        filePath: uploadResponse.data.filePath, // Para local
         useAI,
       });
 
