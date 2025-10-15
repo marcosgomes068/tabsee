@@ -172,24 +172,38 @@ export async function POST(request: NextRequest) {
   const logs: LogEntry[] = [];
 
   try {
-    console.log('[Process] Recebendo requisição...');
+    console.log('[Process] ===== INÍCIO DO PROCESSAMENTO =====');
+    
     const body = await request.json();
+    console.log('[Process] Body recebido. Keys:', Object.keys(body));
+    
     const { fileData, useAI } = body;
 
-    let buffer: Buffer;
-
-    // Processar de base64 (método universal)
-    if (fileData) {
-      console.log('[Process] Processando arquivo da memória (base64)...');
-      logs.push(createLog('info', '🔄 Processando arquivo da memória...'));
-      buffer = Buffer.from(fileData, 'base64');
-      console.log('[Process] Buffer criado com sucesso:', buffer.length, 'bytes');
-    } else {
-      console.error('[Process] fileData não fornecido');
+    if (!fileData) {
+      console.error('[Process] ❌ fileData não fornecido');
+      logs.push(createLog('error', '❌ Dados do arquivo não fornecidos'));
       return NextResponse.json(
         { success: false, message: 'Dados do arquivo não fornecidos', logs },
         { status: 400 }
       );
+    }
+
+    console.log('[Process] ✓ fileData recebido. Length:', fileData.length);
+    console.log('[Process] useAI:', useAI);
+
+    let buffer: Buffer;
+
+    // Processar de base64 (método universal)
+    console.log('[Process] Decodificando base64...');
+    logs.push(createLog('info', '🔄 Processando arquivo da memória...'));
+    
+    try {
+      buffer = Buffer.from(fileData, 'base64');
+      console.log('[Process] ✓ Buffer criado:', buffer.length, 'bytes');
+    } catch (bufferError) {
+      console.error('[Process] ❌ Erro ao criar buffer:', bufferError);
+      logs.push(createLog('error', '❌ Erro ao decodificar arquivo'));
+      throw new Error('Falha ao decodificar arquivo: ' + (bufferError instanceof Error ? bufferError.message : String(bufferError)));
     }
 
     logs.push(createLog('info', '🚀 Iniciando processamento...'));
@@ -197,6 +211,7 @@ export async function POST(request: NextRequest) {
     // 1. Processar Excel do buffer
     console.log('[Process] Iniciando processamento do Excel...');
     const excelData = await processExcelFromBuffer(buffer, logs);
+    console.log('[Process] ✓ Excel processado. Sheets:', excelData.sheets.length);
 
     // 2. Converter para JSON
     logs.push(createLog('process', '🔄 Convertendo dados para JSON...'));
@@ -224,6 +239,7 @@ export async function POST(request: NextRequest) {
 
     logs.push(createLog('success', '🎉 Processamento concluído com sucesso!'));
 
+    console.log('[Process] ===== SUCESSO! =====');
     return NextResponse.json({
       success: true,
       data: { originalData: excelData, jsonData },
@@ -232,11 +248,24 @@ export async function POST(request: NextRequest) {
       logs,
     });
   } catch (error) {
-    console.error('Erro no processamento:', error);
-    logs.push(createLog('error', `❌ Erro: ${error instanceof Error ? error.message : 'Erro desconhecido'}`));
+    console.error('[Process] ===== ERRO CRÍTICO =====');
+    console.error('[Process] Erro completo:', error);
+    console.error('[Process] Stack:', error instanceof Error ? error.stack : 'N/A');
+    
+    const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    
+    logs.push(createLog('error', `❌ Erro: ${errorMessage}`));
     
     return NextResponse.json(
-      { success: false, message: 'Erro ao processar arquivo', logs },
+      { 
+        success: false, 
+        message: 'Erro ao processar arquivo', 
+        error: errorMessage,
+        stack: errorStack,
+        logs,
+        timestamp: new Date().toISOString()
+      },
       { status: 500 }
     );
   }
