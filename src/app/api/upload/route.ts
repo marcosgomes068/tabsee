@@ -1,7 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
-import { existsSync } from 'fs';
 
 const isVercel = process.env.VERCEL === '1';
 
@@ -39,21 +36,41 @@ export async function POST(request: NextRequest) {
         message: 'Arquivo enviado com sucesso!',
       });
     } else {
-      // Localmente, salvar no filesystem
-      const uploadDir = path.join(process.cwd(), 'data', 'input');
-      if (!existsSync(uploadDir)) {
-        await mkdir(uploadDir, { recursive: true });
+      // Localmente, também retornar base64 para consistência
+      // Mas também podemos salvar no disco se necessário
+      const base64 = buffer.toString('base64');
+      
+      // Tentar salvar no disco (apenas localmente)
+      try {
+        const { writeFile, mkdir } = await import('fs/promises');
+        const path = await import('path');
+        const { existsSync } = await import('fs');
+        
+        const uploadDir = path.join(process.cwd(), 'data', 'input');
+        if (!existsSync(uploadDir)) {
+          await mkdir(uploadDir, { recursive: true });
+        }
+
+        const filePath = path.join(uploadDir, file.name);
+        await writeFile(filePath, buffer);
+        
+        return NextResponse.json({
+          success: true,
+          filePath,
+          fileName: file.name,
+          fileData: base64,
+          message: 'Arquivo enviado com sucesso!',
+        });
+      } catch (fsError) {
+        // Se falhar ao salvar no disco, retornar apenas base64
+        console.warn('Não foi possível salvar arquivo no disco, usando memória:', fsError);
+        return NextResponse.json({
+          success: true,
+          fileName: file.name,
+          fileData: base64,
+          message: 'Arquivo enviado com sucesso!',
+        });
       }
-
-      const filePath = path.join(uploadDir, file.name);
-      await writeFile(filePath, buffer);
-
-      return NextResponse.json({
-        success: true,
-        filePath,
-        fileName: file.name,
-        message: 'Arquivo enviado com sucesso!',
-      });
     }
   } catch (error) {
     console.error('Erro no upload:', error);
