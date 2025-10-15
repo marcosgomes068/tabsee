@@ -25,28 +25,48 @@ function createLog(level: LogEntry['level'], message: string): LogEntry {
 
 // Função para processar Excel
 async function processExcel(filePath: string, logs: LogEntry[]): Promise<{ sheets: ProcessedSheet[] }> {
-  logs.push(createLog('process', '📊 Iniciando leitura do arquivo Excel...'));
-  
-  const buffer = await readFile(filePath);
-  const workbook = XLSX.read(buffer, { type: 'buffer' });
-  
-  logs.push(createLog('info', `📋 Planilhas encontradas: ${workbook.SheetNames.join(', ')}`));
-  
-  const sheets: ProcessedSheet[] = workbook.SheetNames.map(sheetName => {
-    const worksheet = workbook.Sheets[sheetName];
-    const data = XLSX.utils.sheet_to_json(worksheet) as Record<string, unknown>[];
-    const columns = Object.keys(data[0] || {});
+  try {
+    logs.push(createLog('process', '📊 Iniciando leitura do arquivo Excel...'));
     
-    return {
-      name: sheetName,
-      data,
-      columns,
-    };
-  });
+    const buffer = await readFile(filePath);
+    logs.push(createLog('info', `📄 Arquivo lido: ${buffer.length} bytes`));
+    
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    
+    logs.push(createLog('info', `📋 Planilhas encontradas: ${workbook.SheetNames.join(', ')}`));
+    
+    const sheets: ProcessedSheet[] = workbook.SheetNames.map(sheetName => {
+      const worksheet = workbook.Sheets[sheetName];
+      const data = XLSX.utils.sheet_to_json(worksheet) as Record<string, unknown>[];
+      
+      if (data.length === 0) {
+        logs.push(createLog('warning', `⚠️ Planilha "${sheetName}" está vazia`));
+        return {
+          name: sheetName,
+          data: [],
+          columns: [],
+        };
+      }
+      
+      const columns = Object.keys(data[0] || {});
+      
+      logs.push(createLog('info', `✓ Planilha "${sheetName}": ${data.length} linhas, ${columns.length} colunas`));
+      
+      return {
+        name: sheetName,
+        data,
+        columns,
+      };
+    });
 
-  logs.push(createLog('success', `✅ ${sheets.length} planilha(s) processada(s) com sucesso!`));
-  
-  return { sheets };
+    logs.push(createLog('success', `✅ ${sheets.length} planilha(s) processada(s) com sucesso!`));
+    
+    return { sheets };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logs.push(createLog('error', `❌ Erro ao processar Excel: ${errorMessage}`));
+    throw new Error(`Erro ao processar arquivo Excel: ${errorMessage}`);
+  }
 }
 
 // Interface para as planilhas processadas
@@ -62,10 +82,18 @@ function generateDashboard(sheets: ProcessedSheet[]): DashboardData {
   
   // Para cada planilha, criar gráficos
   sheets.forEach((sheet, index) => {
-    if (sheet.data.length === 0) return;
+    if (!sheet.data || sheet.data.length === 0) {
+      console.warn(`Planilha "${sheet.name}" está vazia, pulando geração de gráficos`);
+      return;
+    }
 
     const firstSheet = sheet.data;
     const columns = sheet.columns;
+
+    if (!columns || columns.length === 0) {
+      console.warn(`Planilha "${sheet.name}" não tem colunas, pulando`);
+      return;
+    }
 
     // Tentar encontrar colunas numéricas e de texto
     const numericColumns = columns.filter((col: string) => {
@@ -77,6 +105,8 @@ function generateDashboard(sheets: ProcessedSheet[]): DashboardData {
       const firstValue = firstSheet[0]?.[col];
       return typeof firstValue === 'string' && firstValue.trim() !== '';
     });
+
+    console.log(`Planilha "${sheet.name}": ${numericColumns.length} colunas numéricas, ${textColumns.length} colunas de texto`);
 
     // Gráfico de barras
     if (numericColumns.length > 0 && textColumns.length > 0) {
