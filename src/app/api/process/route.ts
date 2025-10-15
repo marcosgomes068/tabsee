@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readFile } from 'fs/promises';
 import * as XLSX from 'xlsx';
-import path from 'path';
 import { LogEntry, DashboardData, ChartData } from '@/types';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 // Função para criar logs
 function createLog(level: LogEntry['level'], message: string): LogEntry {
@@ -171,35 +172,22 @@ export async function POST(request: NextRequest) {
   const logs: LogEntry[] = [];
 
   try {
+    console.log('[Process] Recebendo requisição...');
     const body = await request.json();
-    const { fileName, filePath, fileData, useAI } = body;
+    const { fileData, useAI } = body;
 
     let buffer: Buffer;
 
-    // Aceitar tanto fileData (base64 do Vercel) quanto filePath (local)
+    // Processar de base64 (método universal)
     if (fileData) {
-      // Processar de base64 (Vercel)
-      logs.push(createLog('info', '🔄 Processando arquivo da memória (Vercel mode)...'));
+      console.log('[Process] Processando arquivo da memória (base64)...');
+      logs.push(createLog('info', '🔄 Processando arquivo da memória...'));
       buffer = Buffer.from(fileData, 'base64');
-    } else if (fileName || filePath) {
-      // Processar de arquivo (Local)
-      let actualFilePath = filePath;
-      if (!actualFilePath && fileName) {
-        actualFilePath = path.join(process.cwd(), 'data', 'input', fileName);
-      }
-
-      if (!actualFilePath) {
-        return NextResponse.json(
-          { success: false, message: 'Nome ou caminho do arquivo não fornecido' },
-          { status: 400 }
-        );
-      }
-
-      logs.push(createLog('info', '📂 Lendo arquivo do disco...'));
-      buffer = await readFile(actualFilePath);
+      console.log('[Process] Buffer criado com sucesso:', buffer.length, 'bytes');
     } else {
+      console.error('[Process] fileData não fornecido');
       return NextResponse.json(
-        { success: false, message: 'Dados do arquivo não fornecidos' },
+        { success: false, message: 'Dados do arquivo não fornecidos', logs },
         { status: 400 }
       );
     }
@@ -207,6 +195,7 @@ export async function POST(request: NextRequest) {
     logs.push(createLog('info', '🚀 Iniciando processamento...'));
 
     // 1. Processar Excel do buffer
+    console.log('[Process] Iniciando processamento do Excel...');
     const excelData = await processExcelFromBuffer(buffer, logs);
 
     // 2. Converter para JSON
